@@ -1,8 +1,8 @@
 /**
  * 
  * @authors cchen
- * @date    2017-04-07 
- * @version 4.0
+ * @date    2017-04-26
+ * @version 5
  */
 
 (function(factory) {
@@ -10,14 +10,13 @@
         alert('jQuery is required.');
     }
 
-    jQuery(function() {
+    jQuery(function() { 
         factory.call( null, jQuery );
     }); 
 })(function( $ ){
 	function uploader(options){
 		var defaults = {
 			inputFile: '#filePicker',   //触发上传的div  id
-			use_base64: true,            //是否以bsae64上传
 			auto: false,                 //是否开启自动上传
 			dnd: false,				     //false or 容器 
 			uploadUrl: '',              //上传的链接
@@ -35,10 +34,12 @@
 			onStartUpload: function(){},
 			onUploadFinished: function(){},
 			onUploadSuccess: function(res){},
-			onUploadError: function(){}
+			onUploadError: function(){},
+			onBeforeSend: function(){return true;}
 		};
 		this.opt = $.extend(defaults,options);
 		this.uploadObj = null;
+		this.clipObj = null;
 		this.Uploader = WebUploader.Uploader;
 		this.queuedFile = this.opt.multiple? [] : null;
 		this.flag = 0;
@@ -51,7 +52,7 @@
 		        alert( 'Web Uploader 不支持您的浏览器！');
 		        throw new Error( 'WebUploader does not support the browser you are using.' );
 		    }
-		    if(!navigator.userAgent.match(/AppleWebKit.*Mobile.*/)){
+		    if(!navigator.userAgent.match(/(iPhone|iPod|Android|ios)/i)){
 		    	_this.opt.mode = 'pc';
 		    }
 		    else{
@@ -62,6 +63,9 @@
 		    	_this.clip_id = 'clipArea'+_this.clip_id;
 			    var htmlStr = '<div class="cropper-wraper webuploader-element-invisible" id="'+_this.clip_id+'"><div class="clip-btn">剪裁</div></div>';
 			    $('body').append(htmlStr);
+			    if( _this.opt.mode == 'mobile'){
+			    	_this.opt.auto = true;
+			    }
 		    }
 			_this.uploadSetup();
 		},
@@ -75,7 +79,7 @@
 			// 当不处于剪裁模式时开启压缩
             if(_this.opt.isCrop==false){
             	compress_cfg = {
-				    quality: 80,
+				    quality: 70,
 				    allowMagnify: false,
 				    crop: false,
 				    preserveHeaders: true,
@@ -96,7 +100,7 @@
 				auto: _this.opt.auto,
                 pick: {
                     id: _this.opt.inputFile,
-                    multiple: _this.opt.multiple
+                    multiple: false
                 },
                 accept: {
                 	title: 'Images',
@@ -104,7 +108,7 @@
 				    mimeTypes: mime_cfg
                 },
                 thumb: {
-                	quality: 70,
+                	quality: 80,
                     allowMagnify: false,
                     crop: false,
                     type: ''
@@ -130,52 +134,60 @@
                 	}
                 }
             });
-            
-            // 剪裁模式下首次绑定photoClip
             if(_this.flag == 0&&_this.opt.isCrop){
             	_this.flag = 1;
-            	setTimeout(function(){
-					$("#"+_this.clip_id).photoClip({
-						width: _this.opt.cropW,
-						height: _this.opt.cropH,
-						file: _this.opt.inputFile+' input',
-						ok: '#'+_this.clip_id+' .clip-btn',
-						loadStart: function() {},
-						loadComplete: function() {},
-						clipFinish: function(src){
-							_this.opt.onclipFinish(src);
-							$('#'+_this.clip_id).addClass('webuploader-element-invisible');
-						}
-					});
-
-            	},500);
+            	_this.clipObj = new PhotoClip('#'+_this.clip_id, {
+					size: [_this.opt.cropW, _this.opt.cropH],
+					ok: '#'+_this.clip_id+' .clip-btn',
+					lrzOption: {
+						width: 1000
+					},
+					loadStart: function() {
+						console.log('开始读取照片');
+					},
+					loadComplete: function() {
+						$('#'+_this.clip_id).removeClass('webuploader-element-invisible');
+					},
+					done: function(dataURL) {
+						$('#'+_this.clip_id).addClass('webuploader-element-invisible');
+		                 _this.opt.onclipFinish(dataURL);
+					},
+					fail: function(msg) {
+						console.log(msg);
+					}
+				});				
+	           
             }
+            
             _this.uploadObj.on('fileQueued', function( _file ) {
-	            if(!_this.opt.multiple && _this.queuedFile){
-	            	_this.uploadObj.removeFile(_this.queuedFile,true);
-	            }
-                if((_this.opt.use_base64 && _this.opt.isCrop)||(!_this.opt.use_base64 && !_this.opt.auto && _this.opt.isCrop)){
-                	//使用base64上传且裁剪 或  不使用base64不自动上传且裁剪
-                	$('#'+_this.clip_id).removeClass('webuploader-element-invisible');
-	            	_this.uploadObj.makeThumb( _file, function( error, src ) {
-	            		if(error){}
-	            		if(_this.flag == 1 && $('.photo-clip-rotateLayer img').get(0)){
-	            			$('.photo-clip-rotateLayer img').attr('src',src);
-	            		}
-	                },1,1);
-                }
-                else if((_this.opt.use_base64 && !_this.opt.isCrop)||(!_this.opt.use_base64 && _this.opt.auto)||(!_this.opt.use_base64 && !_this.opt.auto && !_this.opt.isCrop)){
-                	_this.uploadObj.makeThumb( _file, function( error, src ) {
-                		if(error){}
-        				_this.opt.onFileQueued(src,_file);
-	                },1,1);
-                }
-                if(_this.opt.multiple){
-                	_this.queuedFile.push(_file.id);
-                }
-                else{
-                	_this.queuedFile = _file.id;
-                }
+            	if(!_this.opt.auto){
+		            if(!_this.opt.multiple && _this.queuedFile){
+		            	_this.uploadObj.removeFile(_this.queuedFile,true);
+		            }
+		            if(_this.opt.mode == 'pc'){
+		            	_this.uploadObj.makeThumb( _file, function( error, src ) {
+	                		if(_this.opt.isCrop){
+	        					_this.clipObj.load(src);
+		            		}else{
+		            			_this.opt.onFileQueued(src,_file);
+		            		}
+		                },1,1);
+		            }else if(_this.opt.mode == 'mobile'){
+		            	if(!_this.opt.isCrop){
+		            		_this.uploadObj.makeThumb( _file, function( error, src ) {
+		        				_this.opt.onFileQueued(src,_file);
+			                },1,1);
+		            	}
+		            }
+	                
+	                
+	                if(_this.opt.multiple){
+	                	_this.queuedFile.push(_file.id);
+	                }
+	                else{
+	                	_this.queuedFile = _file.id;
+	                }
+            	}
             });
             _this.uploadObj.on('startUpload',function(){
             	_this.opt.onStartUpload();
@@ -183,24 +195,39 @@
             _this.uploadObj.on('uploadFinished',function(){
             	$(_this.opt.submitBtn).removeAttr('data-disabled');
             	_this.opt.onUploadFinished();
+            	if(_this.opt.multiple){
+                	_this.queuedFile = [];
+                }
+                else{
+                	_this.queuedFile = null;
+                }
             });
             _this.uploadObj.on('uploadSuccess',function(_file,res){
+            	if(_this.opt.mode == 'mobile' && _this.opt.isCrop){
+            		if(res.error == 0){
+            			_this.clipObj.load(res.data);
+            		}
+            	}
 		        _this.opt.onUploadSuccess(res);
+            	
             });
             _this.uploadObj.on('uploadError',function(_file,reason){
 		        _this.opt.onUploadError();
             });
-            if(!_this.opt.use_base64){
+            if(_this.opt.submitBtn){
 	            $(_this.opt.submitBtn).click(function(event) {
 	            	var _self = $(this);
-	            	var initFiles = _this.uploadObj.getFiles('inited');
-	            	if(initFiles.length == 0){
-	            		alert('请先上传文件');
-	            		return false;
-	            	}
-	            	if(!_self.attr('data-disabled')){
-	            		_self.attr('data-disabled','true');
-	            		_this.uploadObj.upload();
+	            	var validate = _this.opt.onBeforeSend();
+	            	if(validate){
+		            	var initFiles = _this.uploadObj.getFiles('inited');
+		            	if(initFiles.length == 0){
+		            		alert('请先上传文件');
+		            		return false;
+		            	}
+		            	if(!_self.attr('data-disabled')){
+		            		_self.attr('data-disabled','true');
+		            		_this.uploadObj.upload();
+		            	}
 	            	}
 	            });
             }
