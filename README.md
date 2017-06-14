@@ -4,6 +4,8 @@ uploader是一个可兼容pc端和移动端的上传插件，能满足各种项�
 #### 加载插件
 
 ```
+<link href="css/upload.css" rel="stylesheet">
+
 <script src="http://cdn.bootcss.com/jquery/2.2.1/jquery.min.js"></script>
 <script src="js/webuploader.js"></script>
 <script src="js/hammer.min.js"></script> //需要裁剪功能才引入
